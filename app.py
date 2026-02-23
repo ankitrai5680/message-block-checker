@@ -27,10 +27,10 @@ CATEGORY_POLICY = {
 
 # ================= MULTI-LANGUAGE DIGIT NORMALISATION =================
 INDIAN_DIGITS = str.maketrans(
-    "०१२३४५६७८९"  # Devanagari (Hindi, Marathi, Nepali)
+    "०१२३४५६७८९"  # Devanagari
     "০১২৩৪৫৬৭৮৯"  # Bengali
     "૦૧૨૩૪૫૬૭૮૯"  # Gujarati
-    "੦੧੨੩੪੫੬੭੮੯"  # Gurmukhi (Punjabi)
+    "੦੧੨੩੪੫੬੭੮੯"  # Gurmukhi
     "௦௧௨௩௪௫௬௭௮௯"  # Tamil
     "౦౧౨౩౪౫౬౭౮౯"  # Telugu
     "೦೧೨೩೪೫೬೭೮೯"  # Kannada
@@ -38,12 +38,15 @@ INDIAN_DIGITS = str.maketrans(
     "0123456789" * 8
 )
 
+# ================= NUMBER WORDS =================
 NUMBER_WORDS = {
     "zero":"0","one":"1","two":"2","three":"3","four":"4",
     "five":"5","six":"6","seven":"7","eight":"8","nine":"9",
     "ek":"1","do":"2","teen":"3","char":"4","paanch":"5",
     "chhe":"6","saat":"7","aath":"8","nau":"9"
 }
+
+NUMBER_WORDS_SORTED = sorted(NUMBER_WORDS.items(), key=lambda x: -len(x[0]))
 
 EMAIL_REGEX = re.compile(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}', re.I)
 URL_REGEX = re.compile(r'(https?:\/\/|www\.)', re.I)
@@ -58,17 +61,20 @@ PRICE_CONTEXT = re.compile(
     re.I
 )
 
-# ================= HELPERS =================
+# ================= NORMALIZATION =================
 def normalize(text):
     if not isinstance(text, str):
         return ""
+
     text = text.lower()
     text = text.translate(INDIAN_DIGITS)
     text = re.sub(r'([aeiou])\1+', r'\1', text)
 
-    # number words even when glued
-    for w, d in NUMBER_WORDS.items():
-        text = re.sub(rf"(?<![a-z]){w}(?![a-z])", d, text)
+    prev = None
+    while prev != text:
+        prev = text
+        for w, d in NUMBER_WORDS_SORTED:
+            text = re.sub(rf"(?<![a-z]){w}|{w}(?![a-z])", d, text)
 
     return text
 
@@ -107,31 +113,10 @@ def detect_multi_message_phone(texts, window=3):
                     break
     return False
 
-# ================= COMPACT REPETITION DETECTION =================
-def is_compact_repetition(stream):
-    if len(stream) < 10:
-        return False
-
-    for i in range(len(stream) - 9):
-        s = stream[i:i+10]
-
-        # same digit repeated
-        if len(set(s)) == 1:
-            return True
-
-        # alternating pattern (e.g. 9898989898)
-        if s[0::2] == s[1::2]:
-            return True
-
-    return False
-
 # ================= CLASSIFICATION =================
 def classify_messages(texts):
     for msg in texts:
         stream = digit_stream(msg)
-
-        if is_compact_repetition(stream):
-            return "COMPACT_REPETITION_PHONE"
 
         for i in range(len(stream) - 9):
             if not valid_indian_mobile(stream[i:i+10]):
@@ -139,13 +124,10 @@ def classify_messages(texts):
 
             if re.search(r'\b[6-9]\d{9}\b', msg):
                 return "DIRECT_PHONE_NUMBER"
-
             if re.search(r'\d[^a-zA-Z0-9\s]+\d', msg):
                 return "SYMBOL_SEPARATED_PHONE"
-
             if re.search(r'[a-zA-Z]', msg):
                 return "MIXED_WORD_DIGIT_PHONE"
-
             if re.search(r'double|triple', msg.lower()):
                 return "DOUBLE_TRIPLE_EXPANSION_PHONE"
 
@@ -158,22 +140,17 @@ def classify_messages(texts):
 
     if MAPS_REGEX.search(joined):
         return "MAPS_LINK_SHARED"
-
     if EMAIL_REGEX.search(joined):
         return "EMAIL_SHARED"
-
     if URL_REGEX.search(joined):
         return "NON_MAP_LINK_SHARED"
 
     if PRICE_CONTEXT.search(joined):
         return "PRICE_AMOUNT"
-
     if re.search(r'\b(19|20)\d{2}\b', joined):
         return "YEAR_REFERENCE"
-
     if re.search(r'\b\d+\.\d+\b', joined):
         return "SAFE_DECIMAL"
-
     if re.search(r'\b\d{5,6}\b', joined):
         return "GENERIC_NUMBER"
 
