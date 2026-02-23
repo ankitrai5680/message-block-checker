@@ -113,9 +113,10 @@ def classify_messages(texts):
             if not valid_indian_mobile(candidate):
                 continue
 
-            if re.search(r"[a-z]", norm):
-    debug["rule_triggered"] = "Valid phone reconstructed using letters"
-    return "MIXED_WORD_DIGIT_PHONE", debug
+# ✅ NEW (CRITICAL FIX)
+            if re.search(r"[a-z]", msg.lower()):
+                debug["rule_triggered"] = "Valid phone reconstructed using letters"
+                return "MIXED_WORD_DIGIT_PHONE", debug
 
             if re.search(r"\b[6-9]\d{9}\b", norm):
                 debug["rule_triggered"] = "Direct phone number"
