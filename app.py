@@ -40,29 +40,68 @@ INDIAN_DIGITS = str.maketrans(
 )
 
 # ================= NUMBER WORDS =================
-NUMBER_WORDS = {
-    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
-    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
-    "ten": "10",            # 🔥 critical fix
-    "ek": "1", "do": "2", "teen": "3", "char": "4", "paanch": "5",
-    "chhe": "6", "saat": "7", "aath": "8", "nau": "9"
+# ================= NUMBER WORDS (0–100, multi-language, safe) =================
+
+def build_english_numbers():
+    base = {
+        "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
+        "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+        "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+        "fourteen": 14, "fifteen": 15, "sixteen": 16,
+        "seventeen": 17, "eighteen": 18, "nineteen": 19
+    }
+
+    tens = {
+        "twenty": 20, "thirty": 30, "forty": 40,
+        "fifty": 50, "sixty": 60, "seventy": 70,
+        "eighty": 80, "ninety": 90
+    }
+
+    numbers = {k: str(v) for k, v in base.items()}
+
+    for t_word, t_val in tens.items():
+        numbers[t_word] = str(t_val)
+        for u_word, u_val in base.items():
+            if u_val == 0:
+                continue
+            numbers[f"{t_word}{u_word}"] = str(t_val + u_val)
+            numbers[f"{t_word} {u_word}"] = str(t_val + u_val)
+
+    numbers["hundred"] = "100"
+    numbers["onehundred"] = "100"
+
+    return numbers
+
+
+HINDI_ROMAN_NUMBERS = {
+    # 0–10
+    "shoonya": "0", "ek": "1", "do": "2", "teen": "3", "char": "4",
+    "paanch": "5", "chhe": "6", "saat": "7", "aath": "8", "nau": "9",
+    "das": "10",
+
+    # 11–19
+    "gyarah": "11", "barah": "12", "teerah": "13", "chaudah": "14",
+    "pandrah": "15", "solah": "16", "satrah": "17",
+    "atharah": "18", "unnees": "19",
+
+    # Tens
+    "bees": "20", "tees": "30", "chalees": "40",
+    "pachaas": "50", "saath": "60", "sattar": "70",
+    "assi": "80", "nabbe": "90",
+
+    # 100
+    "sau": "100", "ekso": "100", "ek sau": "100"
 }
 
-NUMBER_WORDS_SORTED = sorted(NUMBER_WORDS.items(), key=lambda x: -len(x[0]))
 
-EMAIL_REGEX = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", re.I)
-URL_REGEX = re.compile(r"(https?:\/\/|www\.)", re.I)
+NUMBER_WORDS = {}
+NUMBER_WORDS.update(build_english_numbers())
+NUMBER_WORDS.update(HINDI_ROMAN_NUMBERS)
 
-MAPS_REGEX = re.compile(
-    r"(google\.com/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl/maps|maps\.apple\.com)",
-    re.I
+NUMBER_WORDS_SORTED = sorted(
+    NUMBER_WORDS.items(),
+    key=lambda x: -len(x[0])
 )
-
-PRICE_CONTEXT = re.compile(
-    r"\b(emi|loan|lakh|lac|l\b|k\b|km|kms|month|months|year|years|yrs?)\b",
-    re.I
-)
-
 # ================= NORMALIZATION =================
 def normalize(text):
     if not isinstance(text, str):
