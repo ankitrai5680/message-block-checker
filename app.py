@@ -30,7 +30,7 @@ INDIAN_DIGITS = str.maketrans(
     "०१२३४५६७८९"
     "০১২৩৪৫৬৭৮৯"
     "૦૧૨૩૪૫૬૭૮૯"
-    "੦੧੨੩੪੫੬੭੮੯"
+    "੦੧੨੃੄੅੆ੇੈ੉੊ੋੌ੍੎੏੐ੑ੒੓੔੕੖੗੘ਖ਼ਗ਼ਜ਼ੜ੝ਫ਼੟"
     "௦௧௨௩௪௫௬௭௮௯"
     "౦౧౨౩౪౫౬౭౮౯"
     "೦೧೨೩೪೫೬೭೮೯"
@@ -40,23 +40,25 @@ INDIAN_DIGITS = str.maketrans(
 
 # ================= NUMBER WORDS =================
 NUMBER_WORDS = {
-    "zero":"0","one":"1","two":"2","three":"3","four":"4",
-    "five":"5","six":"6","seven":"7","eight":"8","nine":"9",
-    "ek":"1","do":"2","teen":"3","char":"4","paanch":"5",
-    "chhe":"6","saat":"7","aath":"8","nau":"9"
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+    "ten": "10",                 # 🔥 FIX 1: added
+    "ek": "1", "do": "2", "teen": "3", "char": "4", "paanch": "5",
+    "chhe": "6", "saat": "7", "aath": "8", "nau": "9"
 }
+
 NUMBER_WORDS_SORTED = sorted(NUMBER_WORDS.items(), key=lambda x: -len(x[0]))
 
-EMAIL_REGEX = re.compile(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}', re.I)
-URL_REGEX = re.compile(r'(https?:\/\/|www\.)', re.I)
+EMAIL_REGEX = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", re.I)
+URL_REGEX = re.compile(r"(https?:\/\/|www\.)", re.I)
 
 MAPS_REGEX = re.compile(
-    r'(google\.com/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl/maps|maps\.apple\.com)',
+    r"(google\.com/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl/maps|maps\.apple\.com)",
     re.I
 )
 
 PRICE_CONTEXT = re.compile(
-    r'\b(emi|loan|lakh|lac|l\b|k\b|km|kms|month|months|year|years|yrs?)\b',
+    r"\b(emi|loan|lakh|lac|l\b|k\b|km|kms|month|months|year|years|yrs?)\b",
     re.I
 )
 
@@ -67,52 +69,31 @@ def normalize(text):
 
     text = text.lower()
     text = text.translate(INDIAN_DIGITS)
-    text = re.sub(r'([aeiou])\1+', r'\1', text)
+    text = re.sub(r"([aeiou])\1+", r"\1", text)
 
+    # 🔥 FIX 2: correct regex boundaries
     prev = None
     while prev != text:
         prev = text
         for w, d in NUMBER_WORDS_SORTED:
-            text = re.sub(rf"(?<![a-z]){w}|{w}(?![a-z])", d, text)
+            text = re.sub(rf"(?<![a-z]){w}(?![a-z])", d, text)
 
     return text
 
 def expand_repetitions(text):
-    text = re.sub(r'double\s*([0-9])', lambda m: m.group(1) * 2, text)
-    text = re.sub(r'triple\s*([0-9])', lambda m: m.group(1) * 3, text)
-    text = re.sub(r'doublenine', '99', text)
-    text = re.sub(r'triplenine', '999', text)
+    text = re.sub(r"double\s*([0-9])", lambda m: m.group(1) * 2, text)
+    text = re.sub(r"triple\s*([0-9])", lambda m: m.group(1) * 3, text)
+    text = re.sub(r"doublenine", "99", text)
+    text = re.sub(r"triplenine", "999", text)
     return text
 
 def digit_stream(text):
-    return re.sub(r'[^0-9]', '', expand_repetitions(text))
+    return re.sub(r"[^0-9]", "", expand_repetitions(text))
 
 def valid_indian_mobile(num):
     return len(num) == 10 and num[0] in "6789"
 
-def extract_digit_chunks(msg):
-    if PRICE_CONTEXT.search(msg.lower()):
-        return []
-    return re.findall(r'\d{2,6}', msg)
-
-# ================= MULTI MESSAGE DETECTION =================
-def detect_multi_message_phone(texts, window=3):
-    n = len(texts)
-    for i in range(n):
-        combined = ""
-        for j in range(i, min(i + window, n)):
-            chunks = extract_digit_chunks(texts[j])
-            if not chunks:
-                break
-            for c in chunks:
-                combined += c
-                if len(combined) == 10 and valid_indian_mobile(combined):
-                    return True
-                if len(combined) > 10:
-                    break
-    return False
-
-# ================= CLASSIFICATION (NORMALIZED + TRACE) =================
+# ================= CLASSIFICATION =================
 def classify_messages(texts):
     debug = {
         "normalized_text": "",
@@ -127,35 +108,31 @@ def classify_messages(texts):
         debug["normalized_text"] = norm
 
         for i in range(len(stream) - 9):
-            candidate = stream[i:i+10]
+            candidate = stream[i:i + 10]
             debug["reconstructed_numbers"].append(candidate)
 
             if not valid_indian_mobile(candidate):
                 continue
 
-            # 🔥 CRITICAL SAFETY FIX
-            if re.search(r'[a-z]', norm):
+            # 🔥 CRITICAL SAFETY RULE
+            if re.search(r"[a-z]", norm):
                 debug["rule_triggered"] = "Valid phone reconstructed using letters"
                 return "MIXED_WORD_DIGIT_PHONE", debug
 
-            if re.search(r'\b[6-9]\d{9}\b', norm):
+            if re.search(r"\b[6-9]\d{9}\b", norm):
                 debug["rule_triggered"] = "Direct phone number"
                 return "DIRECT_PHONE_NUMBER", debug
 
-            if re.search(r'\d[^a-z0-9\s]+\d', norm):
+            if re.search(r"\d[^a-z0-9\s]+\d", norm):
                 debug["rule_triggered"] = "Symbol separated digits"
                 return "SYMBOL_SEPARATED_PHONE", debug
 
-            if re.search(r'double|triple', norm):
+            if re.search(r"double|triple", norm):
                 debug["rule_triggered"] = "Double / triple expansion"
                 return "DOUBLE_TRIPLE_EXPANSION_PHONE", debug
 
             debug["rule_triggered"] = "Generic evasion with valid phone"
             return "MULTI_EVASION_SINGLE_MESSAGE", debug
-
-    if detect_multi_message_phone(texts):
-        debug["rule_triggered"] = "Digits split across multiple messages"
-        return "MULTI_MESSAGE_DIGIT_SPLIT", debug
 
     joined = " ".join(texts).lower()
 
@@ -175,15 +152,15 @@ def classify_messages(texts):
         debug["rule_triggered"] = "Price / finance context"
         return "PRICE_AMOUNT", debug
 
-    if re.search(r'\b(19|20)\d{2}\b', joined):
+    if re.search(r"\b(19|20)\d{2}\b", joined):
         debug["rule_triggered"] = "Year reference"
         return "YEAR_REFERENCE", debug
 
-    if re.search(r'\b\d+\.\d+\b', joined):
+    if re.search(r"\b\d+\.\d+\b", joined):
         debug["rule_triggered"] = "Safe decimal"
         return "SAFE_DECIMAL", debug
 
-    if re.search(r'\b\d{5,6}\b', joined):
+    if re.search(r"\b\d{5,6}\b", joined):
         debug["rule_triggered"] = "Generic numeric"
         return "GENERIC_NUMBER", debug
 
