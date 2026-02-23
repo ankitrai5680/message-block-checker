@@ -27,14 +27,14 @@ CATEGORY_POLICY = {
 
 # ================= MULTI-LANGUAGE DIGIT NORMALISATION =================
 INDIAN_DIGITS = str.maketrans(
-    "०१२३४५६७८९"  # Devanagari
-    "০১২৩৪৫৬৭৮৯"  # Bengali
-    "૦૧૨૩૪૫૬૭૮૯"  # Gujarati
-    "੦੧੨੩੪੫੬੭੮੯"  # Gurmukhi
-    "௦௧௨௩௪௫௬௭௮௯"  # Tamil
-    "౦౧౨౩౪౫౬౭౮౯"  # Telugu
-    "೦೧೨೩೪೫೬೭೮೯"  # Kannada
-    "൦൧൨൩൪൫൬൭൮൯", # Malayalam
+    "०१२३४५६७८९"
+    "০১২৩৪৫৬৭৮৯"
+    "૦૧૨૩૪૫૬૭૮૯"
+    "੦੧੨੩੪੫੬੭੮੯"
+    "௦௧௨௩௪௫௬௭௮௯"
+    "౦౧౨౩౪౫౬౭౮౯"
+    "೦೧೨೩೪೫೬೭೮೯"
+    "൦൧൨൩൪൫൬൭൮൯",
     "0123456789" * 8
 )
 
@@ -45,7 +45,6 @@ NUMBER_WORDS = {
     "ek":"1","do":"2","teen":"3","char":"4","paanch":"5",
     "chhe":"6","saat":"7","aath":"8","nau":"9"
 }
-
 NUMBER_WORDS_SORTED = sorted(NUMBER_WORDS.items(), key=lambda x: -len(x[0]))
 
 EMAIL_REGEX = re.compile(r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}', re.I)
@@ -86,7 +85,7 @@ def expand_repetitions(text):
     return text
 
 def digit_stream(text):
-    return re.sub(r'[^0-9]', '', expand_repetitions(normalize(text)))
+    return re.sub(r'[^0-9]', '', expand_repetitions(text))
 
 def valid_indian_mobile(num):
     return len(num) == 10 and num[0] in "6789"
@@ -113,52 +112,89 @@ def detect_multi_message_phone(texts, window=3):
                     break
     return False
 
-# ================= CLASSIFICATION =================
+# ================= CLASSIFICATION (NORMALIZED + TRACE) =================
 def classify_messages(texts):
+    debug = {
+        "normalized_text": "",
+        "reconstructed_numbers": [],
+        "rule_triggered": None
+    }
+
     for msg in texts:
-        stream = digit_stream(msg)
+        norm = normalize(msg)
+        stream = digit_stream(norm)
+
+        debug["normalized_text"] = norm
 
         for i in range(len(stream) - 9):
-            if not valid_indian_mobile(stream[i:i+10]):
+            candidate = stream[i:i+10]
+            debug["reconstructed_numbers"].append(candidate)
+
+            if not valid_indian_mobile(candidate):
                 continue
 
-            if re.search(r'\b[6-9]\d{9}\b', msg):
-                return "DIRECT_PHONE_NUMBER"
-            if re.search(r'\d[^a-zA-Z0-9\s]+\d', msg):
-                return "SYMBOL_SEPARATED_PHONE"
-            if re.search(r'[a-zA-Z]', msg):
-                return "MIXED_WORD_DIGIT_PHONE"
-            if re.search(r'double|triple', msg.lower()):
-                return "DOUBLE_TRIPLE_EXPANSION_PHONE"
+            # 🔥 CRITICAL SAFETY FIX
+            if re.search(r'[a-z]', norm):
+                debug["rule_triggered"] = "Valid phone reconstructed using letters"
+                return "MIXED_WORD_DIGIT_PHONE", debug
 
-            return "MULTI_EVASION_SINGLE_MESSAGE"
+            if re.search(r'\b[6-9]\d{9}\b', norm):
+                debug["rule_triggered"] = "Direct phone number"
+                return "DIRECT_PHONE_NUMBER", debug
+
+            if re.search(r'\d[^a-z0-9\s]+\d', norm):
+                debug["rule_triggered"] = "Symbol separated digits"
+                return "SYMBOL_SEPARATED_PHONE", debug
+
+            if re.search(r'double|triple', norm):
+                debug["rule_triggered"] = "Double / triple expansion"
+                return "DOUBLE_TRIPLE_EXPANSION_PHONE", debug
+
+            debug["rule_triggered"] = "Generic evasion with valid phone"
+            return "MULTI_EVASION_SINGLE_MESSAGE", debug
 
     if detect_multi_message_phone(texts):
-        return "MULTI_MESSAGE_DIGIT_SPLIT"
+        debug["rule_triggered"] = "Digits split across multiple messages"
+        return "MULTI_MESSAGE_DIGIT_SPLIT", debug
 
-    joined = " ".join(texts)
+    joined = " ".join(texts).lower()
 
     if MAPS_REGEX.search(joined):
-        return "MAPS_LINK_SHARED"
+        debug["rule_triggered"] = "Maps link allowed"
+        return "MAPS_LINK_SHARED", debug
+
     if EMAIL_REGEX.search(joined):
-        return "EMAIL_SHARED"
+        debug["rule_triggered"] = "Email detected"
+        return "EMAIL_SHARED", debug
+
     if URL_REGEX.search(joined):
-        return "NON_MAP_LINK_SHARED"
+        debug["rule_triggered"] = "Non-maps URL detected"
+        return "NON_MAP_LINK_SHARED", debug
 
     if PRICE_CONTEXT.search(joined):
-        return "PRICE_AMOUNT"
-    if re.search(r'\b(19|20)\d{2}\b', joined):
-        return "YEAR_REFERENCE"
-    if re.search(r'\b\d+\.\d+\b', joined):
-        return "SAFE_DECIMAL"
-    if re.search(r'\b\d{5,6}\b', joined):
-        return "GENERIC_NUMBER"
+        debug["rule_triggered"] = "Price / finance context"
+        return "PRICE_AMOUNT", debug
 
-    return "NO_CONTACT_DETECTED"
+    if re.search(r'\b(19|20)\d{2}\b', joined):
+        debug["rule_triggered"] = "Year reference"
+        return "YEAR_REFERENCE", debug
+
+    if re.search(r'\b\d+\.\d+\b', joined):
+        debug["rule_triggered"] = "Safe decimal"
+        return "SAFE_DECIMAL", debug
+
+    if re.search(r'\b\d{5,6}\b', joined):
+        debug["rule_triggered"] = "Generic numeric"
+        return "GENERIC_NUMBER", debug
+
+    debug["rule_triggered"] = "No contact detected"
+    return "NO_CONTACT_DETECTED", debug
 
 # ================= STREAMLIT UI =================
 st.set_page_config(page_title="Message Block Checker", layout="centered")
 st.title("📩 Message Block Checker")
+
+debug_mode = st.checkbox("🔍 Debug mode (show internals)")
 
 user_input = st.text_area(
     "Paste message to check",
@@ -170,12 +206,20 @@ if st.button("Check Message"):
     if not user_input.strip():
         st.warning("Please enter a message.")
     else:
-        category = classify_messages([user_input])
+        category, debug = classify_messages([user_input])
         status = CATEGORY_POLICY[category]
 
         if status == "BLOCKED":
             st.error("🚫 Message Status: BLOCKED")
-            st.write(f"**Blocked Reason:** {category}")
         else:
             st.success("✅ Message Status: ALLOWED")
-            st.write(f"**Reason:** {category}")
+
+        st.write(f"**Category:** {category}")
+        st.write(f"**Rule Triggered:** {debug['rule_triggered']}")
+
+        if debug_mode:
+            st.markdown("### 🔎 Debug details")
+            st.write("**Normalized text:**")
+            st.code(debug["normalized_text"])
+            st.write("**Reconstructed digit candidates:**")
+            st.code(", ".join(debug["reconstructed_numbers"]) or "None")
