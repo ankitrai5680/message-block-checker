@@ -26,22 +26,18 @@ CATEGORY_POLICY = {
 }
 
 # ================= MULTI-LANGUAGE DIGIT NORMALISATION =================
-
-INDIAN_DIGITS = str.maketrans(
-    "०१२३४५६७८९"  # Devanagari
-    "০১২৩৪৫৬৭८৯"  # Bengali
-    "૦૧૨૩૪૫૬૭૮৯"  # Gujarati
-    "੦੧੨੩੪੫੬੭੮੯"  # Gurmukhi
-    "௦௧௨௩௪௫௬௭௮௯"  # Tamil
-    "౦౧౨౩౪౫౬౭౮౯"  # Telugu
-    "೦೧೨೩೪೫೬೭೮೯"  # Kannada
-    "൦൧൨൩൪൫൬൭൮൯", # Malayalam
-    "0123456789" * 8
-)
+INDIAN_DIGIT_MAPS = [
+    str.maketrans("०१२३४५६७८९", "0123456789"),  # Devanagari
+    str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789"),  # Bengali
+    str.maketrans("૦૧૨૩૪૫૬૭૮৯", "0123456789"),  # Gujarati
+    str.maketrans("੦੧੨੃੪੫੬੭੮੯", "0123456789"),  # Gurmukhi
+    str.maketrans("௦௧௨௩௪௫௬௭௮௯", "0123456789"),  # Tamil
+    str.maketrans("౦౧౨౩౪౫౬౭౮౯", "0123456789"),  # Telugu
+    str.maketrans("೦೧೨೩೪೫೬೭೮೯", "0123456789"),  # Kannada
+    str.maketrans("൦൧൨൩൪൫൬൭൮൯", "0123456789"),  # Malayalam
+]
 
 # ================= NUMBER WORDS =================
-# ================= NUMBER WORDS (0–100, multi-language, safe) =================
-
 def build_english_numbers():
     base = {
         "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
@@ -69,47 +65,45 @@ def build_english_numbers():
 
     numbers["hundred"] = "100"
     numbers["onehundred"] = "100"
-
     return numbers
 
 
 HINDI_ROMAN_NUMBERS = {
-    # 0–10
-    "shoonya": "0", "ek": "1", "do": "2", "teen": "3", "char": "4",
-    "paanch": "5", "chhe": "6", "saat": "7", "aath": "8", "nau": "9",
-    "das": "10",
+    "ek": "1", "do": "2", "teen": "3", "char": "4", "paanch": "5",
+    "chhe": "6", "saat": "7", "aath": "8", "nau": "9", "das": "10",
 
-    # 11–19
     "gyarah": "11", "barah": "12", "terah": "13", "chaudah": "14",
     "pandrah": "15", "solah": "16", "satrah": "17",
     "atharah": "18", "unnees": "19",
 
-    # Tens
     "bees": "20", "tees": "30", "chalees": "40",
     "pachaas": "50", "saath": "60", "sattar": "70",
     "assi": "80", "nabbe": "90",
 
-    # 100
     "sau": "100", "ekso": "100", "ek sau": "100"
 }
 
-
-NUMBER_WORDS = {}
-NUMBER_WORDS.update(build_english_numbers())
-NUMBER_WORDS.update(HINDI_ROMAN_NUMBERS)
+BASE_NUMBER_WORDS = {}
+BASE_NUMBER_WORDS.update(build_english_numbers())
+BASE_NUMBER_WORDS.update(HINDI_ROMAN_NUMBERS)
 
 NUMBER_WORDS_SORTED = sorted(
-    NUMBER_WORDS.items(),
+    BASE_NUMBER_WORDS.items(),
     key=lambda x: -len(x[0])
 )
-# ================= NORMALIZATION =================
+
+# ================= HELPERS =================
+def collapse_vowels(text):
+    return re.sub(r"([aeiou])\1+", r"\1", text)
+
+
 def normalize(text):
     if not isinstance(text, str):
         return ""
 
     text = text.lower()
-    text = text.translate(INDIAN_DIGITS)
-    text = re.sub(r"([aeiou])\1+", r"\1", text)
+    for m in INDIAN_DIGIT_MAPS:
+        text = text.translate(m)
 
     prev = None
     while prev != text:
@@ -119,144 +113,85 @@ def normalize(text):
 
     return text
 
+
 def expand_repetitions(text):
     text = re.sub(r"double\s*([0-9])", lambda m: m.group(1) * 2, text)
     text = re.sub(r"triple\s*([0-9])", lambda m: m.group(1) * 3, text)
-    text = re.sub(r"doublenine", "99", text)
-    text = re.sub(r"triplenine", "999", text)
     return text
+
 
 def digit_stream(text):
     return re.sub(r"[^0-9]", "", expand_repetitions(text))
 
+
 def valid_indian_mobile(num):
     return len(num) == 10 and num[0] in "6789"
 
+
+# ================= REGEX =================
+EMAIL_REGEX = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", re.I)
+URL_REGEX = re.compile(r"(https?:\/\/|www\.)", re.I)
+MAPS_REGEX = re.compile(r"(google\.com/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl/maps|maps\.apple\.com)", re.I)
+PRICE_CONTEXT = re.compile(r"\b(emi|loan|lakh|lac|k\b|km|kms|month|year|yrs?)\b", re.I)
+
 # ================= CLASSIFICATION =================
 def classify_messages(texts):
-    debug = {
-        "normalized_text": "",
-        "reconstructed_numbers": [],
-        "rule_triggered": None
-    }
+    debug = {"normalized_text": "", "reconstructed_numbers": [], "rule_triggered": None}
 
     for msg in texts:
         norm = normalize(msg)
-        stream = digit_stream(norm)
+        norm_vowel = collapse_vowels(norm)
+
+        streams = [
+            ("original", digit_stream(norm)),
+            ("vowel_collapsed", digit_stream(norm_vowel))
+        ]
+
         debug["normalized_text"] = norm
 
-        for i in range(len(stream) - 9):
-            candidate = stream[i:i + 10]
-            debug["reconstructed_numbers"].append(candidate)
+        for mode, stream in streams:
+            for i in range(len(stream) - 9):
+                candidate = stream[i:i + 10]
+                debug["reconstructed_numbers"].append(f"{candidate} ({mode})")
 
-            if not valid_indian_mobile(candidate):
-                continue
+                if not valid_indian_mobile(candidate):
+                    continue
 
-# ✅ NEW (CRITICAL FIX)
-            if re.search(r"[a-z]", msg.lower()):
-                debug["rule_triggered"] = "Valid phone reconstructed using letters"
-                return "MIXED_WORD_DIGIT_PHONE", debug
-
-            if re.search(r"\b[6-9]\d{9}\b", norm):
-                debug["rule_triggered"] = "Direct phone number"
-                return "DIRECT_PHONE_NUMBER", debug
-
-            if re.search(r"\d[^a-z0-9\s]+\d", norm):
-                debug["rule_triggered"] = "Symbol separated digits"
-                return "SYMBOL_SEPARATED_PHONE", debug
-
-            if re.search(r"double|triple", norm):
-                debug["rule_triggered"] = "Double / triple expansion"
-                return "DOUBLE_TRIPLE_EXPANSION_PHONE", debug
-
-            debug["rule_triggered"] = "Generic evasion with valid phone"
-            return "MULTI_EVASION_SINGLE_MESSAGE", debug
+                if re.search(r"[a-z]", msg.lower()):
+                    debug["rule_triggered"] = f"Phone reconstructed using letters ({mode})"
+                    return "MIXED_WORD_DIGIT_PHONE", debug
 
     joined = " ".join(texts).lower()
 
     if MAPS_REGEX.search(joined):
-        debug["rule_triggered"] = "Maps link allowed"
         return "MAPS_LINK_SHARED", debug
-
     if EMAIL_REGEX.search(joined):
-        debug["rule_triggered"] = "Email detected"
         return "EMAIL_SHARED", debug
-
     if URL_REGEX.search(joined):
-        debug["rule_triggered"] = "Non-maps URL detected"
         return "NON_MAP_LINK_SHARED", debug
-
     if PRICE_CONTEXT.search(joined):
-        debug["rule_triggered"] = "Price / finance context"
         return "PRICE_AMOUNT", debug
 
-    if re.search(r"\b(19|20)\d{2}\b", joined):
-        debug["rule_triggered"] = "Year reference"
-        return "YEAR_REFERENCE", debug
-
-    if re.search(r"\b\d+\.\d+\b", joined):
-        debug["rule_triggered"] = "Safe decimal"
-        return "SAFE_DECIMAL", debug
-
-    if re.search(r"\b\d{5,6}\b", joined):
-        debug["rule_triggered"] = "Generic numeric"
-        return "GENERIC_NUMBER", debug
-
-    debug["rule_triggered"] = "No contact detected"
     return "NO_CONTACT_DETECTED", debug
-
-# ================= REGEX DEFINITIONS =================
-
-EMAIL_REGEX = re.compile(
-    r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}",
-    re.I
-)
-
-URL_REGEX = re.compile(
-    r"(https?:\/\/|www\.)",
-    re.I
-)
-
-MAPS_REGEX = re.compile(
-    r"(google\.com/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl/maps|maps\.apple\.com)",
-    re.I
-)
-
-PRICE_CONTEXT = re.compile(
-    r"\b(emi|loan|lakh|lac|l\b|k\b|km|kms|month|months|year|years|yrs?)\b",
-    re.I
-)
 
 # ================= STREAMLIT UI =================
 st.set_page_config(page_title="Message Block Checker", layout="centered")
 st.title("📩 Message Block Checker")
 
-debug_mode = st.checkbox("🔍 Debug mode (show internals)")
+debug_mode = st.checkbox("🔍 Debug mode")
 
-user_input = st.text_area(
-    "Paste message to check",
-    height=160,
-    placeholder="Enter message text here..."
-)
+user_input = st.text_area("Paste message", height=160)
 
 if st.button("Check Message"):
-    if not user_input.strip():
-        st.warning("Please enter a message.")
+    category, debug = classify_messages([user_input])
+    status = CATEGORY_POLICY[category]
+
+    if status == "BLOCKED":
+        st.error("🚫 BLOCKED")
     else:
-        category, debug = classify_messages([user_input])
-        status = CATEGORY_POLICY[category]
+        st.success("✅ ALLOWED")
 
-        if status == "BLOCKED":
-            st.error("🚫 Message Status: BLOCKED")
-        else:
-            st.success("✅ Message Status: ALLOWED")
+    st.write("**Category:**", category)
 
-        st.write(f"**Category:** {category}")
-        st.write(f"**Rule Triggered:** {debug['rule_triggered']}")
-
-        if debug_mode:
-            st.markdown("### 🔎 Debug details")
-            st.write("**Normalized text:**")
-            st.code(debug["normalized_text"])
-            st.write("**Reconstructed digit candidates:**")
-            st.code(", ".join(debug["reconstructed_numbers"]) or "None")
+    if debug_mode:
+        st.code(debug)
