@@ -80,7 +80,7 @@ HINDI_ROMAN_NUMBERS = {
     "das": "10",
 
     # 11–19
-    "gyarah": "11", "barah": "12", "teerah": "13", "chaudah": "14",
+    "gyarah": "11", "barah": "12", "terah": "13", "chaudah": "14",
     "pandrah": "15", "solah": "16", "satrah": "17",
     "atharah": "18", "unnees": "19",
 
