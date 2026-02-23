@@ -114,7 +114,6 @@ def classify_messages(texts):
                 continue
 
             if re.search(r"[a-z]", norm):
-                if re.search(r"[a-z]", msg.lower()):
     debug["rule_triggered"] = "Valid phone reconstructed using letters"
     return "MIXED_WORD_DIGIT_PHONE", debug
 
