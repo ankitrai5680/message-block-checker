@@ -76,7 +76,7 @@ def normalize(text):
     while prev != text:
         prev = text
         for w, d in NUMBER_WORDS_SORTED:
-            text = re.sub(rf"(?<![a-z]){w}(?![a-z])", d, text)
+            text = re.sub(rf"(?<![a-z]){w}", d, text)
 
     return text
 
