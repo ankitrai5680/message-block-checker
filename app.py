@@ -48,7 +48,12 @@ INDIAN_DIGITS = str.maketrans(
     "०१२३४५६७८९"  # Devanagari
     "০১২৩৪৫৬৭८৯"  # Bengali
     "૦૧૨૩૪૫૬૭૮৯"  # Gujarati
-    "੦੧੨੃੄੅੆ੇੈ੉੊"
+    "੦੧੨੩੪੫੬੭੮੯"  # Gurmukhi
+    "௦௧௨௩௪௫௬௭௮௯"  # Tamil
+    "౦౧౨౩౪౫౬౭౮౯"  # Telugu
+    "೦೧೨೩೪೫೬೭೮೯"  # Kannada
+    "൦൧൨൩൪൫൬൭൮൯", # Malayalam
+    "0123456789" * 8
 )
 
 # ================= NUMBER WORDS =================
