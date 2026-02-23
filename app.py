@@ -205,6 +205,28 @@ def classify_messages(texts):
     debug["rule_triggered"] = "No contact detected"
     return "NO_CONTACT_DETECTED", debug
 
+# ================= REGEX DEFINITIONS =================
+
+EMAIL_REGEX = re.compile(
+    r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}",
+    re.I
+)
+
+URL_REGEX = re.compile(
+    r"(https?:\/\/|www\.)",
+    re.I
+)
+
+MAPS_REGEX = re.compile(
+    r"(google\.com/maps|maps\.google\.com|maps\.app\.goo\.gl|goo\.gl/maps|maps\.apple\.com)",
+    re.I
+)
+
+PRICE_CONTEXT = re.compile(
+    r"\b(emi|loan|lakh|lac|l\b|k\b|km|kms|month|months|year|years|yrs?)\b",
+    re.I
+)
+
 # ================= STREAMLIT UI =================
 st.set_page_config(page_title="Message Block Checker", layout="centered")
 st.title("📩 Message Block Checker")
