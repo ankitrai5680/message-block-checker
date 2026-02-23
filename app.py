@@ -191,9 +191,9 @@ if st.button("Check Message"):
 
     st.write(f"### Confidence Score: **{confidence}%**")
 
-    if confidence == 0:
+    if confidence < 30:
         st.success("✅ ALLOWED")
-    elif confidence < 70:
+    elif confidence < 50:
         st.warning("⚠️ WARNING – Low confidence, needs review")
     else:
         if status == "BLOCKED":
