@@ -181,7 +181,7 @@ def classify_messages(texts):
 st.set_page_config(page_title="Message Block Checker", layout="centered")
 st.title("📩 Message Block Checker")
 
-debug_mode = st.checkbox("🔍 Show exhaustive debug")
+debug_mode = st.checkbox("🔍 Show exhaustive debug", value=True)
 
 msg = st.text_area("Paste message to check", height=160)
 
