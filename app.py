@@ -26,23 +26,6 @@ CATEGORY_POLICY = {
 }
 
 # ================= MULTI-LANGUAGE DIGIT NORMALISATION =================
-# 8 scripts × 10 digits = equal length → SAFE for str.maketrans
-INDIAN_DIGITS = str.maketrans(
-    "०१२३४५६७८९"  # Devanagari
-    "০১২৩৪৫৬৭৮৯"  # Bengali
-    "૦૧૨૩૪૫૬૭૮૯"  # Gujarati
-    "੦੧੨੃੄੅੆ੇੈ੉੊"  # (placeholder removed)
-)
-
-# Correct version (do NOT edit)
-INDIAN_DIGITS = str.maketrans(
-    "०१२३४५६७८९"  # Devanagari
-    "০১২৩৪৫৬৭৮৯"  # Bengali
-    "૦૧૨૩૪૫૬૭૮૯"  # Gujarati
-    "੦੧੨੃੄੅੆ੇੈ੉੊"
-)
-
-# ⛔ The above placeholder is intentionally overridden below ⛔
 
 INDIAN_DIGITS = str.maketrans(
     "०१२३४५६७८९"  # Devanagari
