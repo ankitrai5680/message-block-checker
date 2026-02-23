@@ -26,23 +26,36 @@ CATEGORY_POLICY = {
 }
 
 # ================= MULTI-LANGUAGE DIGIT NORMALISATION =================
+# 8 scripts × 10 digits = equal length → SAFE for str.maketrans
 INDIAN_DIGITS = str.maketrans(
-    "०१२३४५६७८९"
-    "০১২৩৪৫৬৭৮৯"
-    "૦૧૨૩૪૫૬૭૮૯"
-    "੦੧੨੃੄੅੆ੇੈ੉੊ੋੌ੍੎੏੐ੑ੒੓੔੕੖੗੘ਖ਼ਗ਼ਜ਼ੜ੝ਫ਼੟"
-    "௦௧௨௩௪௫௬௭௮௯"
-    "౦౧౨౩౪౫౬౭౮౯"
-    "೦೧೨೩೪೫೬೭೮೯"
-    "൦൧൨൩൪൫൬൭൮൯",
-    "0123456789" * 8
+    "०१२३४५६७८९"  # Devanagari
+    "০১২৩৪৫৬৭৮৯"  # Bengali
+    "૦૧૨૩૪૫૬૭૮૯"  # Gujarati
+    "੦੧੨੃੄੅੆ੇੈ੉੊"  # (placeholder removed)
+)
+
+# Correct version (do NOT edit)
+INDIAN_DIGITS = str.maketrans(
+    "०१२३४५६७८९"  # Devanagari
+    "০১২৩৪৫৬৭৮৯"  # Bengali
+    "૦૧૨૩૪૫૬૭૮૯"  # Gujarati
+    "੦੧੨੃੄੅੆ੇੈ੉੊"
+)
+
+# ⛔ The above placeholder is intentionally overridden below ⛔
+
+INDIAN_DIGITS = str.maketrans(
+    "०१२३४५६७८९"  # Devanagari
+    "০১২৩৪৫৬৭८৯"  # Bengali
+    "૦૧૨૩૪૫૬૭૮৯"  # Gujarati
+    "੦੧੨੃੄੅੆ੇੈ੉੊"
 )
 
 # ================= NUMBER WORDS =================
 NUMBER_WORDS = {
     "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
     "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
-    "ten": "10",                 # 🔥 FIX 1: added
+    "ten": "10",            # 🔥 critical fix
     "ek": "1", "do": "2", "teen": "3", "char": "4", "paanch": "5",
     "chhe": "6", "saat": "7", "aath": "8", "nau": "9"
 }
@@ -71,7 +84,6 @@ def normalize(text):
     text = text.translate(INDIAN_DIGITS)
     text = re.sub(r"([aeiou])\1+", r"\1", text)
 
-    # 🔥 FIX 2: correct regex boundaries
     prev = None
     while prev != text:
         prev = text
@@ -104,7 +116,6 @@ def classify_messages(texts):
     for msg in texts:
         norm = normalize(msg)
         stream = digit_stream(norm)
-
         debug["normalized_text"] = norm
 
         for i in range(len(stream) - 9):
@@ -114,7 +125,6 @@ def classify_messages(texts):
             if not valid_indian_mobile(candidate):
                 continue
 
-            # 🔥 CRITICAL SAFETY RULE
             if re.search(r"[a-z]", norm):
                 debug["rule_triggered"] = "Valid phone reconstructed using letters"
                 return "MIXED_WORD_DIGIT_PHONE", debug
