@@ -1,9 +1,9 @@
 import streamlit as st
 import re
+from copy import deepcopy
 
 # ================= CATEGORY POLICY =================
 CATEGORY_POLICY = {
-    # BLOCKED
     "DIRECT_PHONE_NUMBER": "BLOCKED",
     "SYMBOL_SEPARATED_PHONE": "BLOCKED",
     "MIXED_WORD_DIGIT_PHONE": "BLOCKED",
@@ -14,7 +14,6 @@ CATEGORY_POLICY = {
     "EMAIL_SHARED": "BLOCKED",
     "NON_MAP_LINK_SHARED": "BLOCKED",
 
-    # ALLOWED
     "MAPS_LINK_SHARED": "ALLOWED",
     "PRICE_AMOUNT": "ALLOWED",
     "YEAR_REFERENCE": "ALLOWED",
@@ -30,10 +29,10 @@ INDIAN_DIGIT_MAPS = [
     str.maketrans("०१२३४५६७८९", "0123456789"),
     str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789"),
     str.maketrans("૦૧૨૩૪૫૬૭૮৯", "0123456789"),
-    str.maketrans("੦੧੨੩੪੫੬੭੮੯", "0123456789"),
+    str.maketrans("੦੧੨੃੄੅੆ੇੈ੉", "0123456789"),
     str.maketrans("௦௧௨௩௪௫௬௭௮௯", "0123456789"),
     str.maketrans("౦౧౨౩౪౫౬౭౮౯", "0123456789"),
-    str.maketrans("೦೧੨೩೪೫೬೭೮೯", "0123456789"),
+    str.maketrans("೦೧೨೩೪೫೬೭೮೯", "0123456789"),
     str.maketrans("൦൧൨൩൪൫൬൭൮൯", "0123456789"),
 ]
 
@@ -51,7 +50,6 @@ def build_english_numbers():
         "fifty": 50, "sixty": 60, "seventy": 70,
         "eighty": 80, "ninety": 90
     }
-
     out = {k: str(v) for k, v in base.items()}
     for t, tv in tens.items():
         out[t] = str(tv)
@@ -78,10 +76,10 @@ NUMBER_WORDS.update(HINDI_ROMAN_NUMBERS)
 NUMBER_WORDS_SORTED = sorted(NUMBER_WORDS.items(), key=lambda x: -len(x[0]))
 
 # ================= HELPERS =================
-def collapse_vowels(text):
+def collapse_vowels(text: str) -> str:
     return re.sub(r"([aeiou])\1+", r"\1", text)
 
-def normalize(text):
+def normalize(text: str) -> str:
     if not isinstance(text, str):
         return ""
     text = text.lower()
@@ -93,12 +91,13 @@ def normalize(text):
         prev = text
         for w, d in NUMBER_WORDS_SORTED:
             text = re.sub(rf"(?<![a-z]){w}", d, text)
+
     return text
 
-def digit_stream(text):
+def digit_stream(text: str) -> str:
     return re.sub(r"[^0-9]", "", text)
 
-def valid_indian_mobile(num):
+def valid_indian_mobile(num: str) -> bool:
     return len(num) == 10 and num[0] in "6789"
 
 # ================= REGEX =================
@@ -111,55 +110,78 @@ PRICE_CONTEXT = re.compile(r"\b(emi|loan|lakh|lac|km|kms|year|yrs?)\b", re.I)
 def classify_messages(texts):
     confidence = 0
     debug = {
-        "reconstructed_numbers": [],
-        "confidence_breakdown": []
+        "raw_messages": texts,
+        "passes": [],
+        "final_decision": None
     }
 
     for msg in texts:
-        norm = normalize(msg)
-        norm_collapsed = collapse_vowels(norm)
+        for pass_name, source_text in [
+            ("original", msg),
+            ("vowel_collapsed", collapse_vowels(msg))
+        ]:
+            pass_debug = {
+                "pass": pass_name,
+                "source_text": source_text,
+                "normalized": None,
+                "digit_stream": None,
+                "candidates": []
+            }
 
-        for mode, text in [("original", norm), ("vowel_collapsed", norm_collapsed)]:
-            digits = digit_stream(text)
+            normalized = normalize(source_text)
+            digits = digit_stream(normalized)
+
+            pass_debug["normalized"] = normalized
+            pass_debug["digit_stream"] = digits
+
             for i in range(len(digits) - 9):
                 candidate = digits[i:i+10]
-                if valid_indian_mobile(candidate):
-                    confidence += 50
-                    debug["confidence_breakdown"].append("Valid Indian mobile (+50)")
-                    debug["reconstructed_numbers"].append(f"{candidate} ({mode})")
+                cand_debug = {
+                    "candidate": candidate,
+                    "valid_mobile": valid_indian_mobile(candidate)
+                }
+                pass_debug["candidates"].append(cand_debug)
 
+                if cand_debug["valid_mobile"]:
+                    confidence += 50
                     if re.search(r"[a-z]", msg.lower()):
                         confidence += 10
-                        debug["confidence_breakdown"].append("Letters mixed with digits (+10)")
-
-                    if mode == "vowel_collapsed":
+                    if pass_name == "vowel_collapsed":
                         confidence -= 10
-                        debug["confidence_breakdown"].append("Caught via vowel collapse (-10)")
 
-                    if len(debug["reconstructed_numbers"]) > 1:
-                        confidence += 10
-                        debug["confidence_breakdown"].append("Multiple reconstructions (+10)")
+                    debug["passes"].append(pass_debug)
+                    debug["final_decision"] = "MIXED_WORD_DIGIT_PHONE"
 
-                    return "MIXED_WORD_DIGIT_PHONE", min(confidence, 100), debug
+                    return (
+                        "MIXED_WORD_DIGIT_PHONE",
+                        min(confidence, 100),
+                        debug
+                    )
+
+            debug["passes"].append(pass_debug)
 
     joined = " ".join(texts).lower()
 
     if EMAIL_REGEX.search(joined):
+        debug["final_decision"] = "EMAIL_SHARED"
         return "EMAIL_SHARED", 80, debug
 
     if MAPS_REGEX.search(joined):
+        debug["final_decision"] = "MAPS_LINK_SHARED"
         return "MAPS_LINK_SHARED", 80, debug
 
     if PRICE_CONTEXT.search(joined):
+        debug["final_decision"] = "PRICE_AMOUNT"
         return "PRICE_AMOUNT", 10, debug
 
+    debug["final_decision"] = "NO_CONTACT_DETECTED"
     return "NO_CONTACT_DETECTED", 0, debug
 
 # ================= STREAMLIT UI =================
 st.set_page_config(page_title="Message Block Checker", layout="centered")
 st.title("📩 Message Block Checker")
 
-debug_mode = st.checkbox("🔍 Debug mode")
+debug_mode = st.checkbox("🔍 Show exhaustive debug")
 
 msg = st.text_area("Paste message to check", height=160)
 
@@ -182,4 +204,5 @@ if st.button("Check Message"):
     st.write("**Category:**", category)
 
     if debug_mode:
+        st.markdown("## 🧠 Exhaustive Debug Trace")
         st.json(debug)
